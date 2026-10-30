@@ -242,6 +242,61 @@ class LazyViewerTests(unittest.TestCase):
             app.close()
 
 
+    def test_ascii_tree_colours_collapsed_default_and_expand_all_skips_audio(self):
+        import tkinter as tk
+        from str_reader.app import STRViewerApp
+        try:
+            root = tk.Tk()
+        except tk.TclError as exc:
+            self.skipTest(str(exc).splitlines()[0])
+        root.withdraw()
+        app = STRViewerApp(root)
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                folder = Path(directory)
+                (folder / "unique.lua").write_bytes(b"-- unique script")
+                (folder / "USRDIR.tree").write_bytes(b"tree listing")
+                (folder / "audiostreams").mkdir()
+                (folder / "audiostreams/track.snu").write_bytes(b"audio bytes")
+                (folder / "movies/en").mkdir(parents=True)
+                (folder / "movies/en/dup_a.vp6").write_bytes(b"same video payload")
+                (folder / "movies/en/dup_b.vp6").write_bytes(b"same video payload")
+                (folder / "chars").mkdir()
+                (folder / "chars/empty_container.str").write_bytes(b"SToc" + b"\x00" * 16)
+                app.open_directory(directory)
+                deadline = time.monotonic() + 3
+                while (app.scanning_folders or len(app.file_color_tags) < 5 or any(
+                    Path(app.file_nodes[n]).name == "unique.lua" and tag == "unknown"
+                    for n, tag in app.file_color_tags.items()
+                )) and time.monotonic() < deadline:
+                    root.update()
+                    time.sleep(0.01)
+                app.tree.render()
+                collapsed_text = app.tree.text_widget.get("1.0", "end-1c")
+                self.assertIn("+---A1_Audio", collapsed_text)
+                self.assertIn("+---A1_Video", collapsed_text)
+                self.assertNotIn("dup_a.vp6", collapsed_text)
+                by_name = {Path(path).name: app.file_color_tags[node] for node, path in app.file_nodes.items()}
+                self.assertEqual(by_name["unique.lua"], "unique")
+                self.assertEqual(by_name["USRDIR.tree"], "unknown")
+                self.assertEqual(by_name["dup_a.vp6"], "duplicate")
+                self.assertEqual(by_name["dup_b.vp6"], "duplicate")
+                self.assertEqual(by_name["empty_container.str"], "empty")
+                app.expand_all()
+                expanded_text = app.tree.text_widget.get("1.0", "end-1c")
+                self.assertIn("dup_a.vp6", expanded_text)
+                self.assertIn("empty_container.str", expanded_text)
+                self.assertNotIn("track.snu", expanded_text)
+                for node in app.folder_nodes:
+                    if app.is_audio_folder(node):
+                        self.assertFalse(bool(app.tree.item(node, "open")))
+                app.collapse_all()
+                recollapsed_text = app.tree.text_widget.get("1.0", "end-1c")
+                self.assertNotIn("dup_a.vp6", recollapsed_text)
+        finally:
+            app.close()
+
+
 class ConnectionsTests(unittest.TestCase):
     def test_moved_builder_payload_coordinates_and_server_restart(self):
         from connection_explorer.index import Builder, Explorer, MODULE

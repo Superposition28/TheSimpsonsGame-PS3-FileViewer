@@ -12,10 +12,10 @@ from .resources import READERS, parse_partial, array_bounds
 
 
 PARTIAL = {".amb", ".aub", ".bnk.ps3", ".ctb", ".mib", ".msb", ".rcb.ps3", ".rcm_b",
-           ".sbk", ".toc", ".uix", ".xml.ps3", ".ps3", ".itxd", ".bin", ".snu", ".vp6"}
+           ".sbk", ".toc", ".uix", ".xml.ps3", ".ps3", ".itxd", ".bin", ".elf", ".snu", ".vp6"}
 LEGACY = {".graph", ".meta.xml", ".cec.ps3", ".shk.ps3", ".preinstanced", ".txd", ".rws", ".dff", ".tob"}
 SUPPORTED_SUFFIXES = tuple(sorted({".str", ".lh2", ".alb", ".smb", ".dat", ".dat.uie", ".dat.simgroup",
-                                  ".simgroup.dat", ".txt", ".lua", ".lighttoc", ".shk", ".wav", ".ogg", ".mp3", ".flac", ".snr", ".ogv", ".mp4", ".avi", ".webm", ".png", ".dds", ".jpg", ".jpeg", ".bmp", ".tga", ".json", ".csv", ".yaml", ".yml", ".toml", ".fnt", ".srt", ".vtt", ".xml",
+                                  ".simgroup.dat", ".txt", ".lua", ".tree", ".lighttoc", ".shk", ".wav", ".ogg", ".mp3", ".flac", ".snr", ".ogv", ".mp4", ".avi", ".webm", ".png", ".dds", ".jpg", ".jpeg", ".bmp", ".tga", ".json", ".csv", ".yaml", ".yml", ".toml", ".fnt", ".srt", ".vtt", ".xml",
                                   *READERS.keys(), *PARTIAL, *LEGACY} - {"streamsetconfig"}, key=len, reverse=True))
 RESOURCE_KINDS = {"UIE": ".dat.uie", "CEC": ".cec.ps3", "SHK": ".shk.ps3", "TOB": ".tox.ps3",
                   "TOX": ".tox.ps3", "METAMODEL": ".meta.xml", "GRAPH": ".graph",

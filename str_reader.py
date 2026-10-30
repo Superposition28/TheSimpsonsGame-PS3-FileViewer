@@ -52,6 +52,7 @@ if __name__ == "__main__":
         metavar="PATH",
         help="Print section and embedded asset stats for a .str file or directory",
     )
+    parser.add_argument("path", nargs="?", help="Optional file or directory to open on startup")
     args = parser.parse_args()
 
     if args.stats:
@@ -65,4 +66,10 @@ if __name__ == "__main__":
 
     root = tk.Tk()
     app = STRViewerApp(root)
+    startup_path = args.path if args.path else (app.server_source if os.path.isdir(app.server_source) else None)
+    if startup_path:
+        if os.path.isdir(startup_path):
+            app.open_directory(startup_path)
+        elif os.path.isfile(startup_path):
+            app.load_single_file(startup_path)
     root.mainloop()

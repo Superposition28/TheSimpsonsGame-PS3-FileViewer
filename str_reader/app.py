@@ -41,7 +41,9 @@ from .resource_parsers import (
     parse_tob,
 )
 from .str_parser import STRFile
-from .discovery import discover
+from .discovery import DEFERRED, discover
+from .tree_view import AsciiTreeView, TREE_BG, TREE_FG, COLOR_DUPLICATE, COLOR_UNIQUE, COLOR_EMPTY, COLOR_UNKNOWN
+from collections import defaultdict
 from .media import MediaConverter, MediaRequest, MEDIA_SUFFIXES, AUDIO, VIDEO, IMAGES, open_default
 from .descriptions import describe_media
 
@@ -80,20 +82,43 @@ class STRViewerApp:
         self.search_entry = ttk.Entry(self.search_frame, textvariable=self.search_var)
         self.search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.search_entry.bind("<KeyRelease>", self.on_search_change)
+        self.btn_expand_all = ttk.Button(self.search_frame, text="Expand all", command=self.expand_all)
+        self.btn_expand_all.pack(side=tk.LEFT, padx=(6, 0))
+        self.btn_collapse_all = ttk.Button(self.search_frame, text="Collapse all", command=self.collapse_all)
+        self.btn_collapse_all.pack(side=tk.LEFT, padx=(4, 0))
+
+        self.legend_frame = tk.Frame(self.tree_frame, bg=TREE_BG, padx=8, pady=4)
+        self.legend_frame.pack(fill=tk.X, padx=6, pady=(6, 0))
+        tk.Label(self.legend_frame, text="File colours: ", bg=TREE_BG, fg=TREE_FG, font=("Arial", 9)).pack(side=tk.LEFT)
+        for idx, (label, color) in enumerate((
+            ("Duplicated", COLOR_DUPLICATE),
+            ("Unique", COLOR_UNIQUE),
+            ("Empty", COLOR_EMPTY),
+            ("Not verified", COLOR_UNKNOWN),
+        )):
+            if idx:
+                tk.Label(self.legend_frame, text=" · ", bg=TREE_BG, fg=TREE_FG, font=("Arial", 9)).pack(side=tk.LEFT)
+            tk.Label(self.legend_frame, text=label, bg=TREE_BG, fg=color, font=("Arial", 9)).pack(side=tk.LEFT)
 
         self.discovery_status = ttk.Label(self.tree_frame, text="Open a folder to list files.")
         self.discovery_status.pack(side=tk.BOTTOM, fill=tk.X, padx=6)
         self.tree_container = ttk.Frame(self.tree_frame)
         self.tree_container.pack(fill=tk.BOTH, expand=True)
-        self.tree = ttk.Treeview(self.tree_container)
+        self.tree = AsciiTreeView(self.tree_container, self)
+        self.scrollbar_x = ttk.Scrollbar(self.tree_container, orient="horizontal", command=self.tree.xview)
+        self.scrollbar_x.pack(side=tk.BOTTOM, fill=tk.X)
         self.tree.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
         self.scrollbar = ttk.Scrollbar(self.tree_container, orient="vertical", command=self.tree.yview)
         self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.tree.configure(yscrollcommand=self.scrollbar.set)
-        self.tree.tag_configure("asset_supported", foreground="#1b6f3a")
-        self.tree.tag_configure("asset_hex_only", foreground="#7a3e00")
-        self.tree.tag_configure("asset_unknown", foreground="#6b6b6b")
-        self.tree.tag_configure("asset_partial", foreground="#8a6500")
+        self.tree.configure(yscrollcommand=self.scrollbar.set, xscrollcommand=self.scrollbar_x.set)
+        self.tree.tag_configure("duplicate", foreground=COLOR_DUPLICATE)
+        self.tree.tag_configure("unique", foreground=COLOR_UNIQUE)
+        self.tree.tag_configure("empty", foreground=COLOR_EMPTY)
+        self.tree.tag_configure("unknown", foreground=COLOR_UNKNOWN)
+        self.tree.tag_configure("asset_supported", foreground=COLOR_UNIQUE)
+        self.tree.tag_configure("asset_hex_only", foreground=COLOR_EMPTY)
+        self.tree.tag_configure("asset_unknown", foreground=COLOR_UNKNOWN)
+        self.tree.tag_configure("asset_partial", foreground=COLOR_DUPLICATE)
 
         self.tree.bind("<<TreeviewSelect>>", self.on_select)
         self.tree.bind("<<TreeviewOpen>>", self.on_tree_open)
@@ -294,6 +319,15 @@ class STRViewerApp:
         self.tree_index = {}
         self.tree_children = {}
         self.folder_load_task_id = 0
+        self.folder_nodes = set()
+        self.folder_paths = {}
+        self.audio_folder_nodes = set()
+        self.file_nodes = {}
+        self.file_color_tags = {}
+        self.path_meta_cache = {}
+        self.classify_results = Queue()
+        self.classify_task_id = 0
+        self.folder_aliases = self.load_folder_aliases()
         self.root.after(100, self.poll_background)
 
     def is_documented_chunk(self, chunk):
@@ -354,6 +388,13 @@ class STRViewerApp:
                 if self.tree.selection() == (node,):
                     self.on_select(None)
         lines = self.server.poll()
+        for _ in range(5):
+            try:
+                task_id, status_map = self.classify_results.get_nowait()
+            except Empty:
+                break
+            if task_id == self.classify_task_id:
+                self.apply_file_classifications(status_map)
         self.server_log.extend(lines)
         self.server_log = self.server_log[-200:]
         if self.server.running:
@@ -428,6 +469,12 @@ class STRViewerApp:
 
     def close(self):
         self.folder_load_task_id += 1
+        self.classify_task_id += 1
+        self.folder_nodes.clear()
+        self.folder_paths.clear()
+        self.audio_folder_nodes.clear()
+        self.file_nodes.clear()
+        self.file_color_tags.clear()
         self.discovery_cancel.set()
         self.parse_task_id += 1
         for callback in self.root.tk.splitlist(self.root.tk.call("after", "info")):
@@ -443,6 +490,12 @@ class STRViewerApp:
 
     def clear_all(self):
         self.folder_load_task_id += 1
+        self.classify_task_id += 1
+        self.folder_nodes.clear()
+        self.folder_paths.clear()
+        self.audio_folder_nodes.clear()
+        self.file_nodes.clear()
+        self.file_color_tags.clear()
         self.discovery_cancel.set()
         self.parse_task_id += 1
         self.discovery_cancel = threading.Event()
@@ -485,6 +538,7 @@ class STRViewerApp:
 
         for fname in fnames:
             self.load_single_file(fname, reindex=False)
+        self.schedule_classification()
         self.rebuild_tree_index()
 
     def insert_indexed(self, parent, text, **options):
@@ -499,8 +553,160 @@ class STRViewerApp:
         directory = filedialog.askdirectory()
         if not directory:
             return
+        self.open_directory(directory)
+
+    def open_directory(self, directory):
         self.restore_tree()
-        node = self.insert_indexed("", os.path.basename(directory.rstrip(os.sep)) or directory, open=True)
+        base_name = os.path.basename(directory.rstrip(os.sep)) or directory
+        node = self.insert_indexed("", base_name, open=True)
+        self.folder_nodes.add(node)
+        self.folder_paths[node] = directory
+        if base_name.lower() in DEFERRED:
+            self.audio_folder_nodes.add(node)
+        self.scan_directory(directory, node)
+        return node
+
+    @staticmethod
+    def load_folder_aliases():
+        aliases = {}
+        naming_path = MODULE / "reversing/docs/reference/naming.json"
+        try:
+            data = json.loads(naming_path.read_text(encoding="utf-8"))
+            for item in data.get("folders", []):
+                if item.get("scope") == "PS3 EU baseline mapping" and item.get("original") and item.get("extracted"):
+                    aliases[item["original"].lower()] = item["extracted"]
+        except Exception:
+            pass
+        return aliases
+
+    def is_audio_folder(self, node):
+        if node in self.deferred_folders or node in self.audio_folder_nodes:
+            return True
+        cursor = node
+        while cursor:
+            if cursor in self.deferred_folders or cursor in self.audio_folder_nodes:
+                return True
+            text = (self.tree.item(cursor, "text") or "").lower()
+            if text in DEFERRED:
+                return True
+            cursor = self.tree.parent(cursor)
+        return False
+
+    def expand_all(self):
+        self.restore_tree()
+        for node in list(self.folder_nodes):
+            if not self.tree.exists(node):
+                continue
+            if self.is_audio_folder(node):
+                continue
+            self.tree.item(node, open=True)
+        self.tree.render()
+
+    def collapse_all(self):
+        self.restore_tree()
+        for node in list(self.folder_nodes):
+            if not self.tree.exists(node):
+                continue
+            self.tree.item(node, open=(self.tree.parent(node) == ""))
+        for node in list(self.file_nodes):
+            if self.tree.exists(node):
+                self.tree.item(node, open=False)
+        self.tree.render()
+
+    def schedule_classification(self):
+        self.classify_task_id += 1
+        task_id = self.classify_task_id
+        items = list(self.file_nodes.items())
+        if not items:
+            return
+        cancelled = self.discovery_cancel
+        meta_cache = self.path_meta_cache
+        results = self.classify_results
+
+        def classify():
+            status = {}
+            by_size = defaultdict(list)
+            dir_exists = {}
+            for node, path in items:
+                if cancelled.is_set() or task_id != self.classify_task_id:
+                    return
+                if path.lower().endswith(".tree"):
+                    status[node] = "unknown"
+                    continue
+                meta = meta_cache.get(path, False)
+                if meta is False:
+                    parent_dir = os.path.dirname(path) or "."
+                    if parent_dir not in dir_exists:
+                        dir_exists[parent_dir] = os.path.isdir(parent_dir)
+                    if not dir_exists[parent_dir]:
+                        meta = None
+                        meta_cache[path] = None
+                    else:
+                        try:
+                            size = os.path.getsize(path)
+                            is_empty = size == 0
+                            if not is_empty and path.lower().endswith(".str") and size >= 12:
+                                with open(path, "rb") as fh:
+                                    hdr = fh.read(12)
+                                if len(hdr) >= 9 and hdr[:4] == b"SToc" and hdr[8] == 0:
+                                    is_empty = True
+                            meta = {"size": size, "empty": is_empty, "sha256": None}
+                            meta_cache[path] = meta
+                        except OSError:
+                            meta = None
+                            meta_cache[path] = None
+                if meta is None:
+                    status[node] = "unknown"
+                elif meta["empty"]:
+                    status[node] = "empty"
+                else:
+                    by_size[meta["size"]].append((node, path, meta))
+
+            for _size, group in by_size.items():
+                if cancelled.is_set() or task_id != self.classify_task_id:
+                    return
+                if len(group) == 1:
+                    status[group[0][0]] = "unique"
+                else:
+                    by_hash = defaultdict(list)
+                    for node, path, meta in group:
+                        if cancelled.is_set() or task_id != self.classify_task_id:
+                            return
+                        if meta["sha256"] is None:
+                            try:
+                                with open(path, "rb") as fh:
+                                    meta["sha256"] = hashlib.file_digest(fh, "sha256").hexdigest()
+                            except OSError:
+                                status[node] = "unknown"
+                                continue
+                        by_hash[meta["sha256"]].append(node)
+                    for _digest, matched_nodes in by_hash.items():
+                        tag = "duplicate" if len(matched_nodes) > 1 else "unique"
+                        for n in matched_nodes:
+                            status[n] = tag
+
+            results.put((task_id, status))
+
+        threading.Thread(target=classify, daemon=True).start()
+
+    def apply_file_classifications(self, status_map):
+        changed = False
+        for node, color_tag in status_map.items():
+            if not self.tree.exists(node):
+                continue
+            if self.file_color_tags.get(node) != color_tag:
+                self.file_color_tags[node] = color_tag
+                existing = [t for t in (self.tree.item(node, "tags") or ()) if t not in ("duplicate", "unique", "empty", "unknown")]
+                existing.append(color_tag)
+                super(AsciiTreeView, self.tree).item(node, tags=tuple(existing))
+                changed = True
+        if changed:
+            self.tree.schedule_render()
+
+    def _unused_open_folder_placeholder(self, node=None):
+        directory = filedialog.askdirectory()
+        if not directory:
+            return
         self.scan_directory(directory, node)
 
     def scan_directory(self, directory, folder_node):
@@ -535,6 +741,8 @@ class STRViewerApp:
                     break
                 if entry is None:
                     self.scanning_folders.discard(folder_node)
+                    self.schedule_classification()
+                    self.tree.render()
                     self.discovery_status.config(text=f"Listed {counts['files']:,} files ({counts['str']:,} STR archives). Audio folders load when selected.")
                     if self.search_var.get().strip():
                         self.filter_tree(self.search_var.get())
@@ -548,7 +756,16 @@ class STRViewerApp:
                     counts["files"] += 1
                     counts["str"] += int(entry.path.lower().endswith(".str"))
                 else:
-                    node = self.insert_indexed(parent, os.path.basename(entry.path), open=False)
+                    raw_name = os.path.basename(entry.path)
+                    if self.tree.parent(parent) == "" and raw_name.lower() in self.folder_aliases:
+                        display_name = self.folder_aliases[raw_name.lower()]
+                    else:
+                        display_name = raw_name
+                    node = self.insert_indexed(parent, display_name, open=False)
+                    self.folder_nodes.add(node)
+                    self.folder_paths[node] = entry.path
+                    if entry.kind == "deferred" or raw_name.lower() in DEFERRED or display_name.lower() in DEFERRED or parent in self.audio_folder_nodes:
+                        self.audio_folder_nodes.add(node)
                     nodes[os.path.normcase(os.path.normpath(entry.path))] = node
                     if entry.kind == "deferred":
                         self.deferred_folders[node] = entry.path
@@ -577,10 +794,15 @@ class STRViewerApp:
         """Register paths only; STR parsing waits specifically for expansion."""
         if reindex:
             self.restore_tree()
-        node = self.insert_indexed(parent_id or "", os.path.basename(fname), open=False)
+        node = self.insert_indexed(parent_id or "", os.path.basename(fname), open=False, tags=("unknown",))
+        self.file_nodes[node] = fname
+        self.file_color_tags[node] = "unknown"
         self.pending_files[node] = fname
         self.insert_indexed(node, "Expand to load archive" if fname.lower().endswith(".str") else "Select to view")
-        if reindex and self.search_var.get().strip():
+        if reindex:
+            self.schedule_classification()
+            if self.search_var.get().strip():
+                self.filter_tree(self.search_var.get())
             self.filter_tree(self.search_var.get())
         return node
 
@@ -626,9 +848,13 @@ class STRViewerApp:
         self.files_map[root_id] = f
         self.pending_files.pop(root_id, None)
         if getattr(f, "standalone", False):
-            self.tree.item(root_id, tags=("sec_0_chunk_0", "asset_supported"))
+            color_tag = self.file_color_tags.get(root_id, "unique")
+            self.tree.item(root_id, tags=("sec_0_chunk_0", color_tag))
             self.rebuild_tree_index()
             return
+        if not f.sections:
+            self.file_color_tags[root_id] = "empty"
+        self.tree.item(root_id, tags=(self.file_color_tags.get(root_id, "unique"),))
         h_id = self.tree.insert(root_id, "end", text="Header", open=False)
         self.tree.insert(h_id, "end", text=f"Version: {f.header.get('Version', '?')}")
         self.tree.insert(h_id, "end", text=f"Sections: {f.header.get('nSections', '?')}")
@@ -946,7 +1172,7 @@ class STRViewerApp:
                 self.media_choice.config(values=[path.name for path in cached])
                 self.media_choice.current(0)
                 self.media_choice.pack(side=tk.LEFT, padx=5)
-        elif kind in {".txt", ".lua"} or suffix in {".json", ".csv", ".yaml", ".yml", ".toml", ".fnt", ".srt", ".vtt", ".xml"} and kind != ".meta.xml":
+        elif kind in {".txt", ".lua", ".tree"} or suffix in {".json", ".csv", ".yaml", ".yml", ".toml", ".fnt", ".srt", ".vtt", ".xml", ".tree"} and kind != ".meta.xml":
             self.active_converter = {"name": "Source text", "type": "text", "async": True,
                                      "parser": self.parse_text}
         else:
