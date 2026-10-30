@@ -1,7 +1,6 @@
 from .refpack import Refpack
 from .binary_reader import BinaryReader
 from .str_parser import STRFile, STRSection
-from .app import STRViewerApp
 
 __all__ = [
     "Refpack",
@@ -10,3 +9,10 @@ __all__ = [
     "STRSection",
     "STRViewerApp",
 ]
+
+
+def __getattr__(name: str):
+    if name == "STRViewerApp":
+        from .app import STRViewerApp
+        return STRViewerApp
+    raise AttributeError(name)

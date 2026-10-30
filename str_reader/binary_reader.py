@@ -8,44 +8,48 @@ class BinaryReader:
         self.data = data
 
     def seek(self, offset):
+        if not 0 <= offset <= len(self.data):
+            raise ValueError(f"Seek outside payload: {offset:#x}")
         self.stream.seek(offset)
 
     def pos(self):
         return self.stream.tell()
 
     def read_bytes(self, n):
+        if n < 0 or self.pos() + n > len(self.data):
+            raise ValueError(f"Read outside payload: {self.pos():#x}, size {n}")
         return self.stream.read(n)
 
     def read_u8(self):
-        b = self.stream.read(1)
+        b = self.read_bytes(1)
         return struct.unpack(">B", b)[0] if len(b) == 1 else 0
 
     def read_u16(self):
-        b = self.stream.read(2)
+        b = self.read_bytes(2)
         return struct.unpack(">H", b)[0] if len(b) == 2 else 0
 
     def read_i16(self):
-        b = self.stream.read(2)
+        b = self.read_bytes(2)
         return struct.unpack(">h", b)[0] if len(b) == 2 else 0
 
     def read_u16_le(self):
-        b = self.stream.read(2)
+        b = self.read_bytes(2)
         return struct.unpack("<H", b)[0] if len(b) == 2 else 0
 
     def read_i32(self):
-        b = self.stream.read(4)
+        b = self.read_bytes(4)
         return struct.unpack(">i", b)[0] if len(b) == 4 else 0
 
     def read_u32(self):
-        b = self.stream.read(4)
+        b = self.read_bytes(4)
         return struct.unpack(">I", b)[0] if len(b) == 4 else 0
 
     def read_u32_le(self):
-        b = self.stream.read(4)
+        b = self.read_bytes(4)
         return struct.unpack("<I", b)[0] if len(b) == 4 else 0
 
     def read_f32(self):
-        b = self.stream.read(4)
+        b = self.read_bytes(4)
         return struct.unpack(">f", b)[0] if len(b) == 4 else 0.0
 
     def read_string_at(self, offset_base, relative_ptr):
@@ -56,7 +60,7 @@ class BinaryReader:
         self.stream.seek(target)
         chars = []
         while True:
-            b = self.stream.read(1)
+            b = self.read_bytes(1)
             if not b or b == b"\x00":
                 break
             chars.append(b.decode("latin-1"))

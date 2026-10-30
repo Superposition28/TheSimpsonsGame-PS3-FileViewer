@@ -1,0 +1,3 @@
+# Optional viewers and AudioMap descriptions (Tkinter comes with Python).
+Pillow>=10
+PyYAML>=6

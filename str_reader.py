@@ -35,7 +35,8 @@ def _gather_str_files(path):
 
     if os.path.isdir(path):
         found = []
-        for root, _, files in os.walk(path):
+        for root, directories, files in os.walk(path):
+            directories[:] = [name for name in directories if name.lower() not in {".history", ".backup", ".git", "__pycache__"}]
             for name in files:
                 if name.lower().endswith(".str"):
                     found.append(os.path.join(root, name))
