@@ -209,13 +209,13 @@ class TextureExport:
 
 
 def is_probable_txd(data: bytes) -> bool:
-    if not data:
+    if not data or data.startswith((b"\x7fELF", b"SCE\x00")):
         return False
     if data.startswith(SegmentScanner.SIG_FILE_START):
         return True
-    if SegmentScanner.TEXTURE_NAME_SIGNATURE in data:
-        return True
     if data.startswith(SegmentScanner.SIG_BLOCK_START):
+        return True
+    if SegmentScanner.TEXTURE_NAME_SIGNATURE in data[:4096]:
         return True
     return False
 

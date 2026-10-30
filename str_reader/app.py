@@ -42,24 +42,54 @@ from .resource_parsers import (
 )
 from .str_parser import STRFile
 from .discovery import DEFERRED, discover
-from .tree_view import AsciiTreeView, TREE_BG, TREE_FG, COLOR_DUPLICATE, COLOR_UNIQUE, COLOR_EMPTY, COLOR_UNKNOWN
+from .tree_view import (
+    AsciiTreeView,
+    TREE_BG,
+    TREE_FG,
+    DARK_SURFACE,
+    DARK_SELECT,
+    COLOR_DUPLICATE,
+    COLOR_UNIQUE,
+    COLOR_EMPTY,
+    COLOR_UNKNOWN,
+    apply_dark_theme,
+    set_dark_titlebar,
+    style_dark_text_widget,
+)
+import sys
+from .state import DEFAULT_STATE_PATH, InstanceStateManager
 from collections import defaultdict
 from .media import MediaConverter, MediaRequest, MEDIA_SUFFIXES, AUDIO, VIDEO, IMAGES, open_default
 from .descriptions import describe_media
 
 
 class STRViewerApp:
-    def __init__(self, root):
+    def __init__(self, root, state_path=None, restore_session=False):
         self.root = root
         self.root.title("Simpsons Game File Viewer")
         self.root.geometry("1000x700")
+        apply_dark_theme(self.root)
 
         self.server = ServerController()
         self.server_source = str(MODULE / "Source/PS3/EU/1/PS3_GAME/USRDIR")
         self.server_database = str(MODULE / "GameFiles/file-connections/index.sqlite")
         self.server_extracted = [str(MODULE / "GameFiles" / name) for name in
                                  ("PS3-EU-Full-audio_reorg-isRenamed", "PS3-EU-FullFlattened-audio_reorg-isRenamed")]
-        self.server_port = 8781
+        if state_path is None and "unittest" not in sys.modules:
+            state_path = DEFAULT_STATE_PATH
+        self.state_manager = InstanceStateManager(state_path)
+        self.instance_id = self.state_manager.instance_id
+        self.other_instances = list(self.state_manager.other_instances)
+        self.other_instance_open = self.state_manager.other_instance_open
+        self.saved_instance_state = self.state_manager.allocate_port_and_load(
+            self.server_source, self.server_database, self.server_extracted
+        )
+        self.server_source = self.saved_instance_state.get("server_source") or self.server_source
+        self.server_database = self.saved_instance_state.get("server_database") or self.server_database
+        self.server_extracted = list(self.saved_instance_state.get("server_extracted") or self.server_extracted)
+        self.server_port = int(self.saved_instance_state.get("server_port") or 8781)
+        if self.other_instance_open or self.instance_id > 1:
+            self.root.title(f"Simpsons Game File Viewer — Instance {self.instance_id} (port {self.server_port})")
         self.server_log = []
         bar = ttk.Frame(root)
         bar.pack(fill=tk.X, padx=6, pady=5)
@@ -68,7 +98,8 @@ class STRViewerApp:
         self.btn_server_open = ttk.Button(bar, text="Open connections", command=self.open_connections, state=tk.DISABLED)
         self.btn_server_open.pack(side=tk.LEFT, padx=5)
         ttk.Button(bar, text="Connections settings", command=self.configure_connections).pack(side=tk.LEFT)
-        self.server_status = ttk.Label(bar, text="Stopped")
+        status_txt = f"Stopped (Instance {self.instance_id}, port {self.server_port})" if self.other_instance_open else "Stopped"
+        self.server_status = ttk.Label(bar, text=status_txt)
         self.server_status.pack(side=tk.LEFT, padx=5)
         self.root.protocol("WM_DELETE_WINDOW", self.close)
 
@@ -247,6 +278,7 @@ class STRViewerApp:
         self.view_container.pack(fill=tk.BOTH, expand=True)
 
         self.txt_content = tk.Text(self.view_container, font=("Consolas", 10), wrap=tk.NONE)
+        style_dark_text_widget(self.txt_content, padx=8, pady=6)
         self.txt_content.pack(fill=tk.BOTH, expand=True)
 
         self.table_frame = ttk.Frame(self.view_container)
@@ -263,7 +295,7 @@ class STRViewerApp:
         self.preview_label = ttk.Label(self.gallery_frame, text="Select a texture", anchor="center")
         self.preview_label.pack(fill=tk.BOTH, expand=False, padx=5, pady=(5, 2))
 
-        self.thumb_canvas = tk.Canvas(self.gallery_frame, highlightthickness=0)
+        self.thumb_canvas = tk.Canvas(self.gallery_frame, bg=DARK_SURFACE, highlightthickness=0)
         self.thumb_scroll_y = ttk.Scrollbar(self.gallery_frame, orient="vertical", command=self.thumb_canvas.yview)
         self.thumb_scroll_x = ttk.Scrollbar(self.gallery_frame, orient="horizontal", command=self.thumb_canvas.xview)
         self.thumb_canvas.configure(yscrollcommand=self.thumb_scroll_y.set, xscrollcommand=self.thumb_scroll_x.set)
@@ -286,8 +318,8 @@ class STRViewerApp:
         self.meta_scroll_x.pack(side=tk.BOTTOM, fill=tk.X)
         self.meta_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        menubar = tk.Menu(root)
-        filemenu = tk.Menu(menubar, tearoff=0)
+        menubar = tk.Menu(root, bg=DARK_SURFACE, fg=TREE_FG, activebackground=DARK_SELECT, activeforeground="#f0f4f8", relief=tk.FLAT, borderwidth=0)
+        filemenu = tk.Menu(menubar, tearoff=0, bg=DARK_SURFACE, fg=TREE_FG, activebackground=DARK_SELECT, activeforeground="#f0f4f8", relief=tk.FLAT, borderwidth=0)
         filemenu.add_command(label="Open Files...", command=self.open_files)
         filemenu.add_command(label="Open Folder...", command=self.open_folder)
         filemenu.add_separator()
@@ -327,6 +359,9 @@ class STRViewerApp:
         self.path_meta_cache = {}
         self.classify_results = Queue()
         self.classify_task_id = 0
+        self.folder_aliases = self.load_folder_aliases()
+        if restore_session:
+            self.restore_saved_session()
         self.folder_aliases = self.load_folder_aliases()
         self.root.after(100, self.poll_background)
 
@@ -427,7 +462,8 @@ class STRViewerApp:
             webbrowser.open(self.server.url)
 
     def configure_connections(self):
-        dialog = tk.Toplevel(self.root)
+        dialog = tk.Toplevel(self.root, bg=TREE_BG)
+        set_dark_titlebar(dialog)
         dialog.title("Connections settings")
         dialog.transient(self.root)
         fields = {}
@@ -437,7 +473,8 @@ class STRViewerApp:
                                                ("Extracted roots (one per line)", "\n".join(self.server_extracted)))):
             ttk.Label(dialog, text=label).grid(row=row, column=0, sticky="nw", padx=5, pady=5)
             if row == 3:
-                entry = tk.Text(dialog, width=80, height=3)
+                entry = tk.Text(dialog, width=80, height=3, font=("Consolas", 10))
+                style_dark_text_widget(entry, padx=4, pady=4)
                 entry.insert("1.0", value)
             else:
                 entry = ttk.Entry(dialog, width=80)
@@ -446,7 +483,8 @@ class STRViewerApp:
             fields[row] = entry
         rebuild = tk.BooleanVar(value=getattr(self, "server_rebuild", False))
         ttk.Checkbutton(dialog, text="Rebuild index on next start (reads source archives)", variable=rebuild).grid(row=4, column=1, sticky="w")
-        log = tk.Text(dialog, width=100, height=12, wrap=tk.WORD)
+        log = tk.Text(dialog, width=100, height=12, wrap=tk.WORD, font=("Consolas", 10))
+        style_dark_text_widget(log, padx=6, pady=6)
         log.grid(row=5, column=0, columnspan=2, padx=5, pady=5)
         log.insert("1.0", "\n".join(self.server_log) or "Server is stopped. An existing index is reused unless rebuilding is selected.")
         log.config(state=tk.DISABLED)
@@ -461,6 +499,7 @@ class STRViewerApp:
                 self.server_database = fields[1].get().strip()
                 self.server_extracted = [p.strip() for p in fields[3].get("1.0", "end").splitlines() if p.strip()]
                 self.server_rebuild = rebuild.get()
+                self.save_instance_state(include_roots=False)
                 dialog.destroy()
             except ValueError as exc:
                 messagebox.showerror("Connections settings", str(exc), parent=dialog)
@@ -468,6 +507,7 @@ class STRViewerApp:
         ttk.Button(dialog, text="Save for next start", command=save).grid(row=6, column=1, sticky="e", padx=5, pady=5)
 
     def close(self):
+        self.state_manager.close()
         self.folder_load_task_id += 1
         self.classify_task_id += 1
         self.folder_nodes.clear()
@@ -537,7 +577,8 @@ class STRViewerApp:
             return
 
         for fname in fnames:
-            self.load_single_file(fname, reindex=False)
+            self.load_single_file(fname, reindex=False, save=False)
+        self.save_instance_state()
         self.schedule_classification()
         self.rebuild_tree_index()
 
@@ -555,14 +596,67 @@ class STRViewerApp:
             return
         self.open_directory(directory)
 
-    def open_directory(self, directory):
+    @staticmethod
+    def format_root_path(directory):
+        norm_dir = os.path.normpath(os.path.abspath(directory))
+        norm_mod = os.path.normpath(os.path.abspath(str(MODULE)))
+        try:
+            if os.path.commonpath([norm_dir, norm_mod]) == norm_mod and norm_dir != norm_mod:
+                return os.path.relpath(norm_dir, norm_mod)
+        except ValueError:
+            pass
+        return norm_dir
+
+    def save_instance_state(self, include_roots=True):
+        if include_roots:
+            root_children = self.tree.get_children("")
+            folders = [self.folder_paths[n] for n in root_children if n in self.folder_paths]
+            files = [self.file_nodes[n] for n in root_children if n in self.file_nodes]
+        else:
+            folders = None
+            files = None
+        self.state_manager.save_instance_state(
+            folders=folders,
+            files=files,
+            server_port=self.server_port,
+            server_source=self.server_source,
+            server_database=self.server_database,
+            server_extracted=self.server_extracted,
+        )
+
+    def restore_saved_session(self, fallback_path=None):
+        saved_folders = [p for p in self.saved_instance_state.get("folders", []) if os.path.isdir(p)]
+        saved_files = [p for p in self.saved_instance_state.get("files", []) if os.path.isfile(p)]
+        if saved_folders or saved_files:
+            for folder in saved_folders:
+                self.open_directory(folder, save=False)
+            for fname in saved_files:
+                self.load_single_file(fname, reindex=False, save=False)
+            if saved_files:
+                self.schedule_classification()
+                self.rebuild_tree_index()
+            self.save_instance_state()
+            return True
+        if fallback_path:
+            if os.path.isdir(fallback_path):
+                self.open_directory(fallback_path)
+                return True
+            if os.path.isfile(fallback_path):
+                self.load_single_file(fallback_path)
+                return True
+        return False
+
+    def open_directory(self, directory, save=True):
         self.restore_tree()
         base_name = os.path.basename(directory.rstrip(os.sep)) or directory
-        node = self.insert_indexed("", base_name, open=True)
+        display_path = self.format_root_path(directory)
+        node = self.insert_indexed("", display_path, open=True)
         self.folder_nodes.add(node)
-        self.folder_paths[node] = directory
+        self.folder_paths[node] = os.path.normpath(os.path.abspath(directory))
         if base_name.lower() in DEFERRED:
             self.audio_folder_nodes.add(node)
+        if save:
+            self.save_instance_state()
         self.scan_directory(directory, node)
         return node
 
@@ -790,7 +884,7 @@ class STRViewerApp:
         self.tree.item(node, open=True)
         self.scan_directory(directory, node)
 
-    def load_single_file(self, fname, parent_id=None, reindex=True):
+    def load_single_file(self, fname, parent_id=None, reindex=True, save=True):
         """Register paths only; STR parsing waits specifically for expansion."""
         if reindex:
             self.restore_tree()
@@ -799,6 +893,8 @@ class STRViewerApp:
         self.file_color_tags[node] = "unknown"
         self.pending_files[node] = fname
         self.insert_indexed(node, "Expand to load archive" if fname.lower().endswith(".str") else "Select to view")
+        if save and not parent_id:
+            self.save_instance_state()
         if reindex:
             self.schedule_classification()
             if self.search_var.get().strip():
@@ -921,6 +1017,10 @@ class STRViewerApp:
         if chunk.get("FileName", "").lower().endswith(".txd"):
             return True
         data = chunk.get("PayloadData", chunk.get("Data", b""))
+        fname = (chunk.get("FullPath") or chunk.get("FileName", "")).lower()
+        kind = identify(fname, resource_type, data)
+        if kind and kind not in {".txd", ".rws", ".dff", ".dat"}:
+            return False
         return is_probable_txd(data)
 
     def is_cec_chunk(self, chunk):

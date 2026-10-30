@@ -293,8 +293,92 @@ class LazyViewerTests(unittest.TestCase):
                 app.collapse_all()
                 recollapsed_text = app.tree.text_widget.get("1.0", "end-1c")
                 self.assertNotIn("dup_a.vp6", recollapsed_text)
+                self.assertEqual(root.cget("bg"), "#1e1e1e")
+                self.assertEqual(app.txt_content.cget("bg"), "#181818")
+                self.assertEqual(app.thumb_canvas.cget("bg"), "#181818")
+                from str_reader.parsers.Export_txd import SegmentScanner
+                elf_bytes = b"\x7fELF\x02\x02\x01\x00" + b"\x00" * 56 + SegmentScanner.TEXTURE_NAME_SIGNATURE
+                elf_chunk = {"FileName": "EBOOT.elf", "FullPath": "EBOOT.elf", "Data": elf_bytes, "PayloadData": elf_bytes}
+                self.assertFalse(app.is_txd_chunk(elf_chunk))
+                self.assertEqual(parse_resource(elf_bytes, "EBOOT.elf")["structure"]["signature"], "ELF")
         finally:
             app.close()
+
+    def test_root_path_label_and_multi_instance_toml_state_and_port_increment(self):
+        import os
+        import tkinter as tk
+        import tomllib
+        from connection_explorer.index import MODULE
+        from str_reader.app import STRViewerApp
+        try:
+            root1 = tk.Tk()
+        except tk.TclError as exc:
+            self.skipTest(str(exc).splitlines()[0])
+        root1.withdraw()
+        root2 = tk.Tk()
+        root2.withdraw()
+
+        self.assertEqual(
+            STRViewerApp.format_root_path(str(MODULE / "Source/PS3/DEMO/1/NPEB90029/-USRDIR---")),
+            os.path.join("Source", "PS3", "DEMO", "1", "NPEB90029", "-USRDIR---"),
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            state_file = base / "str_reader_state.toml"
+            folder_a = base / "folder_a"
+            folder_b = base / "folder_b"
+            folder_a.mkdir()
+            folder_b.mkdir()
+            (folder_a / "a.lua").write_bytes(b"-- a")
+            (folder_b / "b.lua").write_bytes(b"-- b")
+            extra_file = base / "standalone.lua"
+            extra_file.write_bytes(b"-- standalone")
+
+            app1 = STRViewerApp(root1, state_path=state_file)
+            app2 = None
+            try:
+                self.assertEqual(app1.instance_id, 1)
+                self.assertFalse(app1.other_instance_open)
+                app1.open_directory(str(folder_a))
+                app1.tree.render()
+                first_line = app1.tree.text_widget.get("1.0", "end-1c").splitlines()[0]
+                self.assertEqual(first_line, os.path.normpath(str(folder_a)))
+
+                app2 = STRViewerApp(root2, state_path=state_file)
+                self.assertEqual(app2.instance_id, 2)
+                self.assertTrue(app2.other_instance_open)
+                self.assertIn(1, app2.other_instances)
+                self.assertGreater(app2.server_port, app1.server_port)
+
+                app2.open_directory(str(folder_b))
+                app2.load_single_file(str(extra_file))
+
+                parsed = tomllib.loads(state_file.read_text(encoding="utf-8"))
+                self.assertEqual(parsed["instances"]["1"]["folders"], [os.path.normpath(str(folder_a))])
+                self.assertEqual(parsed["instances"]["1"]["files"], [])
+                self.assertEqual(parsed["instances"]["2"]["folders"], [os.path.normpath(str(folder_b))])
+                self.assertEqual(parsed["instances"]["2"]["files"], [str(extra_file)])
+            finally:
+                if app2 is not None:
+                    app2.close()
+                app1.close()
+
+            root3 = tk.Tk()
+            root3.withdraw()
+            root4 = tk.Tk()
+            root4.withdraw()
+            app1_restored = STRViewerApp(root3, state_path=state_file, restore_session=True)
+            app2_restored = None
+            try:
+                app2_restored = STRViewerApp(root4, state_path=state_file, restore_session=True)
+                self.assertEqual(list(app1_restored.folder_paths.values()), [os.path.normpath(str(folder_a))])
+                self.assertEqual(list(app2_restored.folder_paths.values()), [os.path.normpath(str(folder_b))])
+                self.assertIn(str(extra_file), app2_restored.file_nodes.values())
+            finally:
+                if app2_restored is not None:
+                    app2_restored.close()
+                app1_restored.close()
 
 
 class ConnectionsTests(unittest.TestCase):

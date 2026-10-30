@@ -7,6 +7,8 @@ from tkinter import ttk
 
 TREE_BG = "#1e1e1e"
 TREE_FG = "#c9d1d9"
+DARK_SURFACE = "#181818"
+DARK_SELECT = "#264f78"
 COLOR_DUPLICATE = "#e3b341"
 COLOR_UNIQUE = "#56d879"
 COLOR_EMPTY = "#ff7b72"
@@ -21,6 +23,196 @@ COLOR_TAGS = (
     "asset_hex_only",
     "asset_unknown",
 )
+
+
+def set_dark_titlebar(window):
+    """Enable native Windows dark title bar when available."""
+    try:
+        import ctypes
+        window.update_idletasks()
+        hwnd = ctypes.windll.user32.GetParent(window.winfo_id()) or window.winfo_id()
+        value = ctypes.c_int(1)
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(value), ctypes.sizeof(value))
+    except Exception:
+        pass
+
+
+def style_dark_text_widget(widget, **extra):
+    """Apply dark mode styling to a tk.Text widget."""
+    cfg = {
+        "bg": DARK_SURFACE,
+        "fg": TREE_FG,
+        "insertbackground": TREE_FG,
+        "selectbackground": DARK_SELECT,
+        "selectforeground": "#f0f4f8",
+        "inactiveselectbackground": DARK_SELECT,
+        "relief": tk.FLAT,
+        "borderwidth": 0,
+        "highlightthickness": 1,
+        "highlightbackground": "#2a2a2a",
+        "highlightcolor": "#3a5a8c",
+    }
+    cfg.update(extra)
+    widget.configure(**cfg)
+
+
+def apply_dark_theme(root):
+    """Apply application-wide dark mode matching the documentation and file tree palette."""
+    root.configure(bg=TREE_BG)
+    set_dark_titlebar(root)
+    root.option_add("*TCombobox*Listbox.background", DARK_SURFACE)
+    root.option_add("*TCombobox*Listbox.foreground", TREE_FG)
+    root.option_add("*TCombobox*Listbox.selectBackground", DARK_SELECT)
+    root.option_add("*TCombobox*Listbox.selectForeground", "#f0f4f8")
+    root.option_add("*Menu.background", DARK_SURFACE)
+    root.option_add("*Menu.foreground", TREE_FG)
+    root.option_add("*Menu.activeBackground", DARK_SELECT)
+    root.option_add("*Menu.activeForeground", "#f0f4f8")
+
+    style = ttk.Style(root)
+    try:
+        style.theme_use("clam")
+    except tk.TclError:
+        pass
+
+    style.configure(
+        ".",
+        background=TREE_BG,
+        foreground=TREE_FG,
+        fieldbackground=DARK_SURFACE,
+        troughcolor="#141414",
+        bordercolor="#343434",
+        darkcolor=DARK_SURFACE,
+        lightcolor="#2a2a2a",
+        insertcolor=TREE_FG,
+        selectbackground=DARK_SELECT,
+        selectforeground="#f0f4f8",
+    )
+    style.configure("TFrame", background=TREE_BG)
+    style.configure("TPanedwindow", background=TREE_BG)
+    style.configure(
+        "Sash",
+        sashthickness=5,
+        gripcount=0,
+        background="#2a2a2a",
+        bordercolor=TREE_BG,
+        lightcolor="#2a2a2a",
+        darkcolor="#2a2a2a",
+    )
+    style.configure("TLabel", background=TREE_BG, foreground=TREE_FG)
+    style.configure(
+        "TButton",
+        background="#262626",
+        foreground="#e6edf3",
+        bordercolor="#3c3c3c",
+        lightcolor="#262626",
+        darkcolor="#262626",
+        focuscolor="#3a5a8c",
+        padding=(8, 4),
+    )
+    style.map(
+        "TButton",
+        background=[("disabled", "#1b1b1b"), ("pressed", "#1f4068"), ("active", "#323842")],
+        foreground=[("disabled", "#6e7681"), ("active", "#ffffff")],
+        bordercolor=[("active", "#58a6ff")],
+    )
+    style.configure(
+        "TEntry",
+        fieldbackground=DARK_SURFACE,
+        foreground=TREE_FG,
+        insertcolor=TREE_FG,
+        bordercolor="#343434",
+        lightcolor=DARK_SURFACE,
+        darkcolor=DARK_SURFACE,
+        selectbackground=DARK_SELECT,
+        selectforeground="#f0f4f8",
+        padding=4,
+    )
+    style.map(
+        "TEntry",
+        fieldbackground=[("disabled", "#141414"), ("readonly", DARK_SURFACE)],
+        foreground=[("disabled", "#6e7681")],
+        bordercolor=[("focus", "#58a6ff")],
+    )
+    style.configure(
+        "TCombobox",
+        fieldbackground=DARK_SURFACE,
+        background="#262626",
+        foreground=TREE_FG,
+        arrowcolor=TREE_FG,
+        bordercolor="#343434",
+        lightcolor="#262626",
+        darkcolor="#262626",
+        selectbackground=DARK_SELECT,
+        selectforeground="#f0f4f8",
+        padding=4,
+    )
+    style.map(
+        "TCombobox",
+        fieldbackground=[("readonly", DARK_SURFACE), ("disabled", "#141414")],
+        foreground=[("readonly", TREE_FG), ("disabled", "#6e7681")],
+        selectbackground=[("readonly", DARK_SURFACE)],
+        selectforeground=[("readonly", TREE_FG)],
+        background=[("active", "#323842")],
+    )
+    style.configure(
+        "TCheckbutton",
+        background=TREE_BG,
+        foreground=TREE_FG,
+        indicatorbackground=DARK_SURFACE,
+        indicatorforeground="#58a6ff",
+        focuscolor=TREE_BG,
+    )
+    style.map(
+        "TCheckbutton",
+        background=[("active", TREE_BG)],
+        foreground=[("active", "#f0f4f8"), ("disabled", "#6e7681")],
+        indicatorbackground=[("selected", DARK_SELECT), ("active", "#242424")],
+    )
+    style.configure(
+        "Treeview",
+        background=DARK_SURFACE,
+        fieldbackground=DARK_SURFACE,
+        foreground=TREE_FG,
+        bordercolor="#2a2a2a",
+        lightcolor=DARK_SURFACE,
+        darkcolor=DARK_SURFACE,
+        rowheight=22,
+    )
+    style.map(
+        "Treeview",
+        background=[("selected", DARK_SELECT)],
+        foreground=[("selected", "#f0f4f8")],
+    )
+    style.configure(
+        "Treeview.Heading",
+        background="#242424",
+        foreground="#f0f4f8",
+        bordercolor="#343434",
+        lightcolor="#242424",
+        darkcolor="#242424",
+        relief="flat",
+        padding=(6, 4),
+    )
+    style.map(
+        "Treeview.Heading",
+        background=[("active", "#323842")],
+        foreground=[("active", "#ffffff")],
+    )
+    for orient in ("Vertical", "Horizontal"):
+        style.configure(
+            f"{orient}.TScrollbar",
+            background="#2d2d2d",
+            troughcolor="#161616",
+            bordercolor="#161616",
+            darkcolor="#2d2d2d",
+            lightcolor="#2d2d2d",
+            arrowcolor="#9da5b4",
+        )
+        style.map(
+            f"{orient}.TScrollbar",
+            background=[("active", "#424242"), ("pressed", "#565656")],
+        )
 
 
 class AsciiTreeView(ttk.Treeview):
@@ -228,9 +420,7 @@ class AsciiTreeView(ttk.Treeview):
         roots = list(self.get_children(""))
         for root_node in roots:
             if root_node in self.app.folder_nodes:
-                path = self.app.folder_paths.get(root_node, "")
-                drive, _ = os.path.splitdrive(os.path.abspath(path)) if path else ("", "")
-                root_label = f"{drive}." if drive else super().item(root_node, "text")
+                root_label = super().item(root_node, "text")
                 add_row("", root_label, "tree_default", root_node)
                 if bool(super().item(root_node, "open")) or self.app.filtered:
                     emit_directory_children(root_node, "")

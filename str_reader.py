@@ -66,10 +66,12 @@ if __name__ == "__main__":
 
     root = tk.Tk()
     app = STRViewerApp(root)
-    startup_path = args.path if args.path else (app.server_source if os.path.isdir(app.server_source) else None)
-    if startup_path:
-        if os.path.isdir(startup_path):
-            app.open_directory(startup_path)
-        elif os.path.isfile(startup_path):
-            app.load_single_file(startup_path)
+    if args.path:
+        if os.path.isdir(args.path):
+            app.open_directory(args.path)
+        elif os.path.isfile(args.path):
+            app.load_single_file(args.path)
+    else:
+        fallback = app.server_source if os.path.isdir(app.server_source) else None
+        app.restore_saved_session(fallback_path=fallback)
     root.mainloop()

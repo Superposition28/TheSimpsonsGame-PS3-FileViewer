@@ -210,6 +210,14 @@ def parse_partial(data: bytes, kind: str) -> dict:
     elif kind == ".bin":
         require(len(data) >= 32 and data[:4] == b"SCE\0", "not the documented SCE executable wrapper")
         result.update(signature="SCE", version=word(data, 4), opening_32_bytes=data[:32].hex())
+    elif kind == ".elf":
+        require(len(data) >= 32 and data[:4] == b"\x7fELF", "not an ELF executable")
+        is_64 = data[4] == 2
+        endian = ">" if data[5] == 2 else "<"
+        entry = struct.unpack_from(f"{endian}{'Q' if is_64 else 'I'}", data, 24)[0]
+        result.update(signature="ELF", elf_class="ELF64" if is_64 else "ELF32",
+                      endian="BE" if endian == ">" else "LE", entry_point=f"{entry:#x}",
+                      opening_32_bytes=data[:32].hex())
     elif kind == ".snu":
         require(len(data) >= 16, "short SNU wrapper")
         result["header_hex"] = data[:16].hex()

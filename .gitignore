@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+str_reader_state.toml*
+
