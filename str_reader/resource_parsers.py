@@ -12,9 +12,9 @@ from .parsers import (
     parse_simgroup,
     parse_rw_stream,
     parse_graph,
-    #parse_ears_mesh,
     parse_preinstanced,
     parse_ears_mesh_unified,
+    parse_msb,
 )
 
 __all__ = [
@@ -26,7 +26,7 @@ __all__ = [
     "parse_simgroup",
     "parse_rw_stream",
     "parse_graph",
-    #"parse_ears_mesh",
     "parse_preinstanced",
     "parse_ears_mesh_unified",
+    "parse_msb",
 ]

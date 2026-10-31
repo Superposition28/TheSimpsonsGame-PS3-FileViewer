@@ -185,8 +185,36 @@ def parse_partial(data: bytes, kind: str) -> dict:
         else:
             result["record_layout"] = "Variable body does not match the documented standard 44-byte record array; retained as raw bytes."
     elif kind == ".msb":
-        require(data[80:84] == b"PFDx", "missing MSB PFDx marker")
-        result["marker_offset"] = 80
+        require(len(data) >= 84 and data[80:84] == b"PFDx", "missing MSB PFDx marker")
+        pfd_map_size = word(data, 0x24)
+        sig = word(data, 0x2C)
+        paired_mus = data[0x30:0x50].split(b"\0")[0].decode("ascii", "replace").strip()
+        version = word(data, 0x54)
+        s7_off = 0x50 + word(data, 0x74)
+        mus_id = f"{word(data, s7_off + 16):08X}" if s7_off + 20 <= len(data) else "unresolved"
+        trailer_off = 0x50 + pfd_map_size
+        events, parts, defines = [], [], []
+        if trailer_off < len(data):
+            trailer_text = data[trailer_off:].decode("latin-1", "replace")
+            cur = None
+            for line in [l.strip() for l in trailer_text.replace("\r\n", "\r").replace("\n", "\r").split("\r") if l.strip()]:
+                if line.startswith("numevents"):
+                    cur = "events"
+                elif line.startswith("numparts"):
+                    cur = "parts"
+                elif line.startswith("numdefines"):
+                    cur = "defines"
+                elif cur == "events" and ":" in line:
+                    k, v = line.split(":", 1)
+                    events.append(dict(name=k.strip(), id=v.strip()))
+                elif cur == "parts":
+                    parts.append(line)
+                elif cur == "defines":
+                    defines.append(line)
+        result.update(marker_offset=80, pfd_map_size=pfd_map_size, format_signature=f"{sig:08X}",
+                      paired_mus=paired_mus, pfd_version=version, mus_file_id=mus_id,
+                      event_count=len(events), part_count=len(parts), define_count=len(defines),
+                      events=events[:20], parts=parts[:20], defines=defines[:20])
     elif kind == ".xml.ps3":
         require(len(data) >= 20 and data[:4] == b"seqm", "missing compiled sequence seqm marker")
         result["seqm_words"] = [word(data, p) for p in range(4, 20, 4)]

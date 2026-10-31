@@ -12,6 +12,7 @@ from .simgroup_parser import parse_simgroup
 from .rw_stream_parser import parse_rw_stream
 from .graph_parser import parse_graph
 from .preinstanced_parser import parse_preinstanced, parse_ears_mesh_unified
+from .msb_parser import parse_msb
 
 __all__ = [
     "parse_cec",
@@ -24,5 +25,6 @@ __all__ = [
     "parse_graph",
     "parse_preinstanced",
     "parse_ears_mesh_unified",
+    "parse_msb",
     "LH2Parser",
 ]
