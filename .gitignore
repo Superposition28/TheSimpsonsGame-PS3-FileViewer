@@ -1,4 +1,8 @@
 __pycache__/
 *.pyc
 str_reader_state.toml*
+bin/
+obj/
+*.user
 
+**/.old*/**

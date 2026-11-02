@@ -1,0 +1,197 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:models="clr-namespace:TheSimpsonsGame.FileViewer.UI.Models"
+        xmlns:formats="clr-namespace:TheSimpsonsGame.FileViewer.Formats"
+        x:Class="TheSimpsonsGame.FileViewer.UI.MainWindow"
+        Title="Simpsons Game File Viewer" Width="1240" Height="820"
+        Background="#181818">
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
+        <!-- Menu Bar -->
+        <Menu Grid.Row="0" Background="#202020">
+            <MenuItem Header="_File">
+                <MenuItem Header="_Open Files..." x:Name="MenuOpenFiles" Click="OnOpenFilesClick"/>
+                <MenuItem Header="Open _Folder..." x:Name="MenuOpenFolder" Click="OnOpenFolderClick"/>
+                <Separator/>
+                <MenuItem Header="_Clear List" x:Name="MenuClearList" Click="OnClearListClick"/>
+                <Separator/>
+                <MenuItem Header="E_xit" x:Name="MenuExit" Click="OnExitClick"/>
+            </MenuItem>
+        </Menu>
+
+        <!-- Connections Toolbar -->
+        <Border Grid.Row="1" Background="#242424" BorderBrush="#303030" BorderThickness="0,0,0,1" Padding="8,6">
+            <DockPanel LastChildFill="True">
+                <StackPanel Orientation="Horizontal" Spacing="8" DockPanel.Dock="Left">
+                    <Button Content="Start connections server" x:Name="BtnToggleServer" Click="OnToggleServerClick"/>
+                    <Button Content="Open connections" x:Name="BtnOpenConnections" Click="OnOpenConnectionsClick" IsEnabled="False"/>
+                    <Button Content="Connections settings" x:Name="BtnConfigureServer" Click="OnConfigureServerClick"/>
+                </StackPanel>
+                <TextBlock x:Name="LblServerStatus" Text="Stopped" VerticalAlignment="Center" Margin="16,0,0,0" Foreground="#9E9E9E"/>
+            </DockPanel>
+        </Border>
+
+        <!-- Main Body -->
+        <Grid Grid.Row="2" ColumnDefinitions="380,4,*">
+            <!-- Left Pane: File Tree Explorer -->
+            <Grid Grid.Column="0" RowDefinitions="Auto,Auto,*,Auto" Background="#1E1E1E">
+                <!-- Search & Expand/Collapse -->
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="8,8,8,4">
+                    <TextBox Grid.Column="0" x:Name="TxtSearch" PlaceholderText="Filter files..."
+                             FontFamily="Consolas, monospace" FontSize="12" TextChanged="OnSearchTextChanged"/>
+                    <Button Grid.Column="1" Content="Expand all" x:Name="BtnExpandAll" Click="OnExpandAllClick" Margin="4,0,0,0" Padding="8,4" FontSize="11"/>
+                    <Button Grid.Column="2" Content="Collapse all" x:Name="BtnCollapseAll" Click="OnCollapseAllClick" Margin="4,0,0,0" Padding="8,4" FontSize="11"/>
+                </Grid>
+
+                <!-- Color Legend -->
+                <Border Grid.Row="1" Background="#1E1E1E" Padding="8,4" Margin="6,2">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="File colours: " Foreground="#C9D1D9" FontSize="11" VerticalAlignment="Center"/>
+                        <TextBlock Text="Duplicated" Foreground="#E3B341" FontSize="11" VerticalAlignment="Center"/>
+                        <TextBlock Text="·" Foreground="#C9D1D9" FontSize="11" VerticalAlignment="Center"/>
+                        <TextBlock Text="Unique" Foreground="#56D879" FontSize="11" VerticalAlignment="Center"/>
+                        <TextBlock Text="·" Foreground="#C9D1D9" FontSize="11" VerticalAlignment="Center"/>
+                        <TextBlock Text="Empty" Foreground="#FF7B72" FontSize="11" VerticalAlignment="Center"/>
+                        <TextBlock Text="·" Foreground="#C9D1D9" FontSize="11" VerticalAlignment="Center"/>
+                        <TextBlock Text="Not verified" Foreground="#B0BAC5" FontSize="11" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- ASCII Tree View -->
+                <ListBox Grid.Row="2" x:Name="TreeListBox" Margin="6,4"
+                         Background="#1E1E1E" BorderThickness="0"
+                         SelectionMode="Single"
+                         ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         SelectionChanged="OnTreeSelectionChanged"
+                         PointerPressed="OnTreePointerPressed"
+                         DoubleTapped="OnTreeDoubleTapped"
+                         KeyDown="OnTreeKeyDown">
+                    <ListBox.Styles>
+                        <Style Selector="ListBoxItem">
+                            <Setter Property="Padding" Value="4,1"/>
+                            <Setter Property="MinHeight" Value="20"/>
+                            <Setter Property="Cursor" Value="Hand"/>
+                        </Style>
+                        <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+                            <Setter Property="Background" Value="#264F78"/>
+                        </Style>
+                        <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+                            <Setter Property="Background" Value="#323842"/>
+                        </Style>
+                    </ListBox.Styles>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="models:AsciiTreeRow">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding Prefix}"
+                                           FontFamily="Consolas, monospace"
+                                           FontSize="13"
+                                           Foreground="#C9D1D9"/>
+                                <TextBlock Text="{Binding Label}"
+                                           FontFamily="Consolas, monospace"
+                                           FontSize="13"
+                                           Foreground="{Binding LabelBrush}"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <!-- Left Status -->
+                <Border Grid.Row="3" Background="#181818" BorderBrush="#2A2A2A" BorderThickness="0,1,0,0" Padding="8,4">
+                    <TextBlock x:Name="LblTreeStatus" Text="Open a folder to list files." Foreground="#9E9E9E" FontSize="11"/>
+                </Border>
+            </Grid>
+
+            <!-- Grid Splitter -->
+            <GridSplitter Grid.Column="1" Background="#2B2B2B" ResizeDirection="Columns"/>
+
+            <!-- Right Pane: Detail & Interpretation -->
+            <Grid Grid.Column="2" RowDefinitions="Auto,*" Background="#161616">
+                <!-- Detail Toolbar -->
+                <Border Grid.Row="0" Background="#202020" BorderBrush="#2C2C2C" BorderThickness="0,0,0,1" Padding="10,8">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <!-- File Info -->
+                        <TextBlock Grid.Column="0" x:Name="LblItemInfo" Text="Select an item to view details."
+                                   VerticalAlignment="Center" FontWeight="SemiBold" FontSize="13" Foreground="#ECEFF1"
+                                   TextTrimming="CharacterEllipsis"/>
+
+                        <!-- Action Buttons -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                            <Button Content="Play" x:Name="BtnPlayMedia" Click="OnPlayMediaClick" IsVisible="False" Background="#00897B" Foreground="White"/>
+                            <ComboBox x:Name="CmbMediaTrack" IsVisible="False" Width="170" SelectionChanged="OnMediaTrackSelectionChanged"/>
+                            <Button Content="Open Externally" x:Name="BtnOpenExternal" Click="OnOpenExternalClick" IsVisible="False"/>
+                            <Button Content="Extract Payload" x:Name="BtnExtractPayload" Click="OnExtractPayloadClick" IsEnabled="False"/>
+                            <Button Content="Export JSON" x:Name="BtnExportJson" Click="OnExportJsonClick" IsEnabled="False"/>
+                            <Button Content="View raw HEX" x:Name="BtnToggleViewMode" Click="OnToggleViewModeClick" IsEnabled="False"/>
+
+                            <!-- Hex Navigation -->
+                            <StackPanel Orientation="Horizontal" Spacing="4" x:Name="PanelHexPager" IsVisible="False">
+                                <Button Content="Prev" x:Name="BtnHexPrev" Click="OnHexPrevClick"/>
+                                <TextBlock x:Name="LblHexOffset" Text="0x0" VerticalAlignment="Center" Margin="4,0" Foreground="#B0BEC5" FontSize="11"/>
+                                <Button Content="Next" x:Name="BtnHexNext" Click="OnHexNextClick"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Content Area -->
+                <Panel Grid.Row="1" Margin="8">
+                    <!-- 1. Text Viewer -->
+                    <TextBox x:Name="TxtContentViewer" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
+                             FontFamily="Consolas, monospace" FontSize="12" Background="#111111" Foreground="#CFD8DC"
+                             BorderBrush="#2A2A2A" BorderThickness="1" IsVisible="True"/>
+
+                    <!-- 2. Table / DataGrid Viewer -->
+                    <Grid x:Name="PanelTableViewer" RowDefinitions="Auto,*" IsVisible="False" Background="#111111">
+                        <TextBlock Grid.Row="0" x:Name="LblTableSummary" Margin="8,6" Foreground="#81D4FA" FontWeight="SemiBold"/>
+                        <DataGrid Grid.Row="1" x:Name="GridDataViewer" IsReadOnly="True" GridLinesVisibility="All"
+                                  BorderBrush="#2A2A2A" BorderThickness="1" Background="Transparent"
+                                  CanUserResizeColumns="True" CanUserSortColumns="True"/>
+                    </Grid>
+
+                    <!-- 3. Texture Viewer -->
+                    <Grid x:Name="PanelTextureViewer" ColumnDefinitions="260,*" IsVisible="False" Background="#111111">
+                        <!-- Texture List -->
+                        <ListBox Grid.Column="0" x:Name="LstTextures" Background="#161616" BorderBrush="#2A2A2A" BorderThickness="0,0,1,0"
+                                 SelectionChanged="OnTextureSelectionChanged">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate DataType="formats:TextureImageInfo">
+                                    <StackPanel Margin="4,2">
+                                        <TextBlock Text="{Binding Name}" FontWeight="Bold" Foreground="#ECEFF1"/>
+                                        <TextBlock Text="{Binding FormatName}" Foreground="#80CBC4" FontSize="11"/>
+                                        <TextBlock Text="{Binding Width, StringFormat='{}{0}x'}" Foreground="#9E9E9E" FontSize="11"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <!-- Image Preview Canvas -->
+                        <Grid Grid.Column="1" RowDefinitions="Auto,*" Margin="10">
+                            <TextBlock Grid.Row="0" x:Name="LblTextureInfo" Margin="0,0,0,8" Foreground="#80CBC4" FontWeight="SemiBold"/>
+                            <Border Grid.Row="1" Background="#0A0A0A" BorderBrush="#333333" BorderThickness="1">
+                                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                                    <Image x:Name="ImgTexturePreview" Stretch="None" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </ScrollViewer>
+                            </Border>
+                        </Grid>
+                    </Grid>
+
+                    <!-- 4. Tree Viewer (Hierarchical structures) -->
+                    <TreeView x:Name="TreeContentViewer" IsVisible="False" Background="#111111" BorderBrush="#2A2A2A" BorderThickness="1">
+                        <TreeView.ItemTemplate>
+                            <TreeDataTemplate DataType="formats:TreeNodeModel" ItemsSource="{Binding Children}">
+                                <TextBlock Text="{Binding Label}" Foreground="#E0E0E0" FontSize="12"/>
+                            </TreeDataTemplate>
+                        </TreeView.ItemTemplate>
+                    </TreeView>
+                </Panel>
+            </Grid>
+        </Grid>
+
+        <!-- Bottom Status Bar -->
+        <Border Grid.Row="3" Background="#1C1C1C" BorderBrush="#282828" BorderThickness="0,1,0,0" Padding="10,4">
+            <DockPanel LastChildFill="True">
+                <TextBlock x:Name="LblGlobalStatus" Text="Ready" Foreground="#9E9E9E" FontSize="11"/>
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>

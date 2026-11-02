@@ -1,0 +1,10 @@
+{
+  "ServerPort": 8781,
+  "ServerSource": "A:\\RemakeEngine\\Main\\EngineApps\\Games\\TheSimpsonsGame-PS3\\Source\\PS3\\EU\\1\\PS3_GAME\\USRDIR",
+  "ServerDatabase": "A:\\RemakeEngine\\Main\\EngineApps\\Games\\TheSimpsonsGame-PS3\\GameFiles\\file-connections\\index.sqlite",
+  "ServerExtracted": [
+    "A:\\RemakeEngine\\Main\\EngineApps\\Games\\TheSimpsonsGame-PS3\\GameFiles\\PS3-EU-Full-audio_reorg-isRenamed",
+    "A:\\RemakeEngine\\Main\\EngineApps\\Games\\TheSimpsonsGame-PS3\\GameFiles\\PS3-EU-FullFlattened-audio_reorg-isRenamed"
+  ],
+  "LastOpenedFolder": "A:\\RemakeEngine\\Main\\EngineApps\\Games\\TheSimpsonsGame-PS3\\Source\\PS3\\EU\\1\\PS3_GAME\\-USRDIR---\\"
+}

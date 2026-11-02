@@ -1,12 +1,28 @@
 # The Simpsons Game file viewer
 
-Run from the game module:
+Run from the game module in C# (.NET 10 / Avalonia):
 
 ```powershell
-python -B reversing/fileviewer/str_reader.py
+dotnet run --project reversing/fileviewer/fileviewer.csproj
+# or open an initial file or directory:
+dotnet run --project reversing/fileviewer/fileviewer.csproj -- "Source/PS3/EU/1/PS3_GAME/USRDIR"
+# or inspect STR archive section & asset stats via CLI:
+dotnet run --project reversing/fileviewer/fileviewer.csproj -- --stats "path/to/file.str"
+# or inspect stored PS3 executable metadata without launching it:
+dotnet run --project reversing/fileviewer/fileviewer.csproj -- --executable-info "Source/PS3/REA/EBOOT.elf"
+# or run the headless connections server:
+dotnet run --project reversing/fileviewer/fileviewer.csproj -- --connections
+# or run the test suite:
+dotnet run --project reversing/fileviewer/fileviewer.csproj -- --test
 ```
 
-Python 3.11+ with Tkinter is required. Optional dependencies are listed in
+Alternatively run the legacy Python version:
+
+```powershell
+python -B reversing/fileviewer/.old.py/str_reader.py
+```
+
+Python 3.11+ with Tkinter is required for the legacy Python scripts. Optional dependencies are listed in
 `requirements.txt`: Pillow supplies texture previews and PyYAML reads AudioMap.
 
 Opening a folder recursively lists paths without reading payloads. Folders named
@@ -51,13 +67,12 @@ external player and can be removed from the named temporary folder later.
 
 ## Connections
 
-The entire connections project now lives here: `file_connections.py`,
-`connection_explorer/` (including its web assets), and shared `game_formats/`
-readers. The desktop toolbar provides **Start connections server**, **Stop
-connections server**, **Open connections**, and **Connections settings**. Closing
-the viewer stops its own server process. Settings configure the original source,
-extracted roots, database, loopback port, and rebuilding. Port `0` picks a free port.
-Server output and startup errors appear in the settings log.
+The connections explorer provides a local HTTP server binding to `127.0.0.1` and serving
+the HTML/JS/CSS client in `connection_explorer/web/` and documentation in `reversing/docs/`.
+The desktop toolbar provides **Start connections server**, **Stop connections server**,
+**Open connections**, and **Connections settings**. Closing the viewer stops its own server process.
+Settings configure the original source, extracted roots, database, loopback port, and rebuilding.
+Port `0` picks a free port. Server output and startup errors appear in the settings log.
 
 The HTTP server binds only to `127.0.0.1`. It reuses an existing index unless a
 rebuild is requested. Building an index deliberately reads the selected input
@@ -67,6 +82,8 @@ uses the same resource dispatcher as the desktop viewer. This optional view has
 a 32 MiB payload limit; larger resources retain the paged raw-word inspector.
 
 ```powershell
+dotnet run --project reversing/fileviewer/fileviewer.csproj -- --connections
+# or legacy Python:
 python -B reversing/fileviewer/file_connections.py --open
 python -B reversing/fileviewer/file_connections.py --build-only --no-extracted
 ```
@@ -99,7 +116,8 @@ fields, not recovered game runtime behavior.
 | TXT / Lua / suffixless resources | Text without execution; observed LightTOC floats and StreamSetConfig entries/string pool. |
 | AMB / MIB / MSB / UIX / compiled XML / SBK | Known headers, standard 44-byte MIB candidate records, markers and literal strings where documented; event logic, APT execution and codecs remain unresolved. |
 | AUB / BNK / CTB / RCB / RCM_B / TOC / generic PS3 | Inventory/header/string observations and raw bytes; references do not yet establish complete parsers. |
-| SNU / VP6 / EBOOT.BIN | SNU AudioMap descriptions and WAV playback; VP6 OGV playback; executable wrapper/header observations only. |
+| SNU / VP6 | SNU AudioMap descriptions and WAV playback; VP6 OGV playback. |
+| PS3 EBOOT.BIN / ELF | SCE signature/version; ELF64 BE PPC64 headers, SHA-256, file-backed entry descriptor, program/section tables and candidate descriptor TOC counts. Validated embedded ELF32 BE SPU headers, tables, section names, literal notes and declared-extent hashes use separate SPU addresses and explicit PPU carrier coordinates. Extracted SPU ELFs can also be inspected directly. Range mapping rejects gaps, zero-fill and overlapping PT_LOAD ranges. No decryption or target execution. |
 | Xbox ITXD | Documented texture metadata, plugin GUID, dimensions, mip/pixel ranges and Xenos descriptor; pixel untile/conversion remains separate from PS3 TXD. |
 
 Two byte-checked EU variants differ from tentative reference tables: VFB samples
@@ -115,15 +133,12 @@ Havok examples are intentionally bounded by the reference inspector itself.
 ## Validation
 
 ```powershell
+dotnet run --project reversing/fileviewer/fileviewer.csproj -- --test
+dotnet run --project reversing/fileviewer/fileviewer.csproj -- --stats "path/to/file.str"
+# or legacy Python tests:
 python -B -m unittest discover -s reversing/fileviewer/tests -v
 python -B reversing/fileviewer/str_reader.py --stats "path/to/file.str"
 ```
-
-Tests use synthetic archives/resources and a temporary connections database. They
-cover raw/compressed framing, exact payloads, unnamed UIE, malformed data, fonts,
-localization, recursive/deferred discovery beyond 20,000 entries, expansion-only STR parsing, interpreted defaults, media playback and conversion commands, and HTTP start/stop/restart. Tk tests skip
-when the local Tcl/Tk runtime is unavailable. `--stats` intentionally reads every
-requested archive; it is separate from GUI lazy loading.
 
 ## Project links
 
