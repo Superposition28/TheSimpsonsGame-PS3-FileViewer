@@ -1071,6 +1071,26 @@ public partial class MainWindow : Window
                 var parsed = ResourceDispatcher.Parse(data, name, resType);
                 _currentResource = parsed;
 
+                if (parsed.Table != null && parsed.Table.Rows.Count > 0)
+                {
+                    var dt = new System.Data.DataTable();
+                    foreach (var h in parsed.Table.Headers) dt.Columns.Add(h);
+                    foreach (var row in parsed.Table.Rows) dt.Rows.Add(row.ToArray());
+                    GridDataViewer.ItemsSource = dt.DefaultView;
+                    LblTableSummary.Text = parsed.Table.Summary;
+                    PanelTableViewer.IsVisible = true;
+                    BtnExportJson.IsEnabled = true;
+                    return;
+                }
+
+                if (parsed.Tree != null && parsed.Tree.Count > 0)
+                {
+                    TreeContentViewer.ItemsSource = parsed.Tree;
+                    TreeContentViewer.IsVisible = true;
+                    BtnExportJson.IsEnabled = true;
+                    return;
+                }
+
                 if (parsed.Structure is List<TreeNodeModel> treeList && treeList.Count > 0)
                 {
                     TreeContentViewer.ItemsSource = treeList;

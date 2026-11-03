@@ -102,6 +102,10 @@ public static class FormatDetector
             if (data.StartsWith("seqm"u8)) return ".xml.ps3";
             if (data.StartsWith("uixf"u8)) return ".uix";
             if (data.StartsWith("PFDx"u8)) return ".msb";
+            if (data.Length >= 0x20 && data.Slice(0x1C, 4).SequenceEqual("SSFX"u8)) return ".aub";
+            if (data.Length >= 16 && data[0] == 0 && data[1] == 1 && data[8] == 0xef && data[9] == 0xbe) return ".rcm_b";
+            if (data.Length >= 0x38 && data[0] == 0 && data[1] == 6 && data[2] == 0 && data[3] == 0 && data[0x14] == 0 && data[0x15] == 0 && data[0x16] == 0 && data[0x17] == 0x18) return ".ctb";
+            if (data.Length >= 48 && data[8] == 0 && data[9] == 0 && data[10] == 0 && data[11] == 0x18 && data[0x24] == 0 && data[0x25] == 0 && data[0x26] == 0 && data[0x27] == 0x18) return ".mib";
         }
 
         return "";

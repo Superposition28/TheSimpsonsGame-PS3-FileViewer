@@ -334,6 +334,166 @@ public static class Program
             Assert(false, $"Media Tools & MUS: {ex.Message}");
         }
 
+        // 18. Test RCB and BNK Parsers & Cross-Format Asset Hash Join
+        try
+        {
+            string moduleRoot = ResolveModuleRoot();
+            string rcbSample = Path.Combine(moduleRoot, "GameFiles", "PS3-EU-Full-audio_reorg-isRenamed", "A2_Characters", "GlobalFolder", "chars", "bart_bc0_grp0_ss1_h0_str", "build", "PS3", "pal_en", "assets", "weapons", "controller", "cct", "export", "controller.rcb.PS3");
+            string bnkSample = Path.Combine(moduleRoot, "GameFiles", "PS3-EU-Full-audio_reorg-isRenamed", "A2_Characters", "GlobalFolder", "chars", "bart_bc0_grp0_ss1_h0_str", "build", "PS3", "pal_en", "assets", "weapons", "controller", "cct", "export", "controller.bnk.PS3");
+
+            if (File.Exists(rcbSample) && File.Exists(bnkSample))
+            {
+                byte[] rcbData = File.ReadAllBytes(rcbSample);
+                var rcb = RcbParser.Parse(rcbData);
+                Assert(rcb != null, "RcbParser parsed controller.rcb.PS3");
+                Assert(rcb!.Version == 23, "RcbParser version is 23 (0x17)");
+                Assert(rcb.AssetHash == 0x6379271C, "RcbParser asset hash matches expected 0x6379271C");
+                Assert(rcb.Entries.Count == 1 && rcb.Entries[0].Name == "controller", "RcbParser entry name is 'controller'");
+                Assert(rcb.Entries[0].TransformMatrix != null && rcb.Entries[0].TransformMatrix!.Length == 16, "RcbParser extracted 4x4 matrix");
+                Assert(rcb.Relocations.Count > 0, "RcbParser extracted relocation fixup table");
+
+                byte[] bnkData = File.ReadAllBytes(bnkSample);
+                var bnk = BnkParser.Parse(bnkData);
+                Assert(bnk != null, "BnkParser parsed controller.bnk.PS3");
+                Assert(bnk!.Version == 9, "BnkParser version is 9");
+                Assert(bnk.TargetSkeletonHash == 0x6379271C, "BnkParser target skeleton hash is 0x6379271C");
+                Assert(bnk.TargetSkeletonHash == rcb.AssetHash, "BNK TargetSkeletonHash joins 1-to-1 with RCB AssetHash");
+
+                // Test ResourceDispatcher
+                var parsedRcb = ResourceDispatcher.Parse(rcbData, "controller.rcb.PS3");
+                Assert(parsedRcb.Format == ".rcb.ps3", "ResourceDispatcher identified .rcb.ps3");
+                Assert(parsedRcb.Table != null && parsedRcb.Table.Rows.Count == 1, "ResourceDispatcher produced RCB Table view");
+                Assert(parsedRcb.Tree != null && parsedRcb.Tree.Count > 0, "ResourceDispatcher produced RCB Tree view");
+            }
+        }
+        catch (Exception ex)
+        {
+            Assert(false, $"RCB/BNK Parsers: {ex.Message}");
+        }
+
+        // 19. Test AUB Audio User Bus Parser
+        try
+        {
+            string moduleRoot = ResolveModuleRoot();
+            string aubSample = Path.Combine(moduleRoot, "GameFiles", "PS3-EU-Full-audio_reorg-isRenamed", "A2_Characters", "simpsons_chars_global_str", "build", "PS3", "pal_en", "assets", "shared", "audio", "config", "global.aub");
+
+            if (File.Exists(aubSample))
+            {
+                byte[] aubData = File.ReadAllBytes(aubSample);
+                var aub = AubParser.Parse(aubData);
+                Assert(aub != null, "AubParser parsed global.aub");
+                Assert(aub!.Magic == "SSFX", "AubParser magic is 'SSFX'");
+                Assert(aub.BusCount == 55, "AubParser bus count is 55");
+                Assert(aub.CategoryCount == 5, "AubParser category count is 5");
+                Assert(aub.Buses.Count == 55, "AubParser extracted all 55 mix buses");
+                Assert(aub.Buses[0].BusName == "MUSIC_SCORE" && aub.Buses[0].Category == "MUSIC", "AubParser bus 0 is MUSIC_SCORE (MUSIC)");
+                Assert(aub.DspNodes.Count > 0, "AubParser extracted DSP graph nodes");
+
+                var parsedAub = ResourceDispatcher.Parse(aubData, "global.aub");
+                Assert(parsedAub.Format == ".aub", "ResourceDispatcher identified .aub");
+                Assert(parsedAub.Table != null && parsedAub.Table.Rows.Count == 55, "ResourceDispatcher produced AUB Table view (55 rows)");
+                Assert(parsedAub.Tree != null && parsedAub.Tree.Count > 0, "ResourceDispatcher produced AUB Tree view");
+            }
+        }
+        catch (Exception ex)
+        {
+            Assert(false, $"AubParser: {ex.Message}");
+        }
+
+        // 20. Test RCM_B Character Motion Audio Binding Parser
+        try
+        {
+            string moduleRoot = ResolveModuleRoot();
+            string rcmSample = Path.Combine(moduleRoot, "GameFiles", "PS3-EU-Full-audio_reorg-isRenamed", "A2_Characters", "GlobalFolder", "chars", "bart_bc0_grp0_ss1_h0_str", "build", "PS3", "pal_en", "assets", "shared", "audio", "audioscripts", "char", "voc", "bart", "glb_bart.rcm_b");
+
+            if (File.Exists(rcmSample))
+            {
+                byte[] rcmData = File.ReadAllBytes(rcmSample);
+                var rcm = RcmBParser.Parse(rcmData);
+                Assert(rcm != null, "RcmBParser parsed glb_bart.rcm_b");
+                Assert(rcm!.Version == 1, "RcmBParser version is 1");
+                Assert(rcm.Magic == 0xEFBE, "RcmBParser magic is 0xEFBE");
+                Assert(rcm.RecordCount == 26, "RcmBParser record count is 26");
+                Assert(rcm.Records.Count == 26, "RcmBParser extracted all 26 binding records");
+                Assert(rcm.Records[0].SpeakerId == 0x41927909, "RcmBParser speaker ID is Bart (0x41927909)");
+                Assert(rcm.Records[0].EventHash < rcm.Records[1].EventHash, "RcmBParser records are sorted by EventHash");
+
+                var parsedRcm = ResourceDispatcher.Parse(rcmData, "glb_bart.rcm_b");
+                Assert(parsedRcm.Format == ".rcm_b", "ResourceDispatcher identified .rcm_b");
+                Assert(parsedRcm.Table != null && parsedRcm.Table.Rows.Count == 26, "ResourceDispatcher produced RCM_B Table view (26 rows)");
+                Assert(parsedRcm.Tree != null && parsedRcm.Tree.Count > 0, "ResourceDispatcher produced RCM_B Tree view");
+            }
+        }
+        catch (Exception ex)
+        {
+            Assert(false, $"RcmBParser: {ex.Message}");
+        }
+
+        // 21. Test CTB Audio Control Table Parser
+        try
+        {
+            string moduleRoot = ResolveModuleRoot();
+            string ctbSample = Path.Combine(moduleRoot, "GameFiles", "PS3-EU-Full-audio_reorg-isRenamed", "A2_Characters", "simpsons_chars_global_str", "build", "PS3", "pal_en", "assets", "shared", "audio", "streams", "dialog", "cht", "eps_bsh_suds.ctb");
+
+            if (File.Exists(ctbSample))
+            {
+                byte[] ctbData = File.ReadAllBytes(ctbSample);
+                var ctb = CtbParser.Parse(ctbData);
+                Assert(ctb != null, "CtbParser parsed eps_bsh_suds.ctb");
+                Assert(ctb!.Version == 6, "CtbParser version is 6");
+                Assert(ctb.CueCount == 3, "CtbParser cue count is 3");
+                Assert(ctb.Cues.Count == 3, "CtbParser extracted all 3 cue records");
+                Assert(ctb.Cues[0].EventName == "attacked_knockdown", "CtbParser cue 0 is 'attacked_knockdown'");
+                Assert(ctb.Cues[0].SoundAliases.Count == 5, "CtbParser cue 0 has 5 sound aliases");
+                Assert(ctb.Cues[1].EventName == "pc_sighted", "CtbParser cue 1 is 'pc_sighted'");
+                Assert(ctb.Cues[2].EventName == "taunt", "CtbParser cue 2 is 'taunt'");
+                Assert(ctb.Cues[2].SoundAliases.Count == 7, "CtbParser cue 2 has 7 sound aliases");
+
+                var parsedCtb = ResourceDispatcher.Parse(ctbData, "eps_bsh_suds.ctb");
+                Assert(parsedCtb.Format == ".ctb", "ResourceDispatcher identified .ctb");
+                Assert(parsedCtb.Table != null && parsedCtb.Table.Rows.Count == 3, "ResourceDispatcher produced CTB Table view (3 rows)");
+                Assert(parsedCtb.Tree != null && parsedCtb.Tree.Count > 0, "ResourceDispatcher produced CTB Tree view");
+            }
+        }
+        catch (Exception ex)
+        {
+            Assert(false, $"CtbParser: {ex.Message}");
+        }
+
+        // 22. Test MIB Audio Mix Snapshot Parser
+        try
+        {
+            string moduleRoot = ResolveModuleRoot();
+            string mibDuckSample = Path.Combine(moduleRoot, "GameFiles", "PS3-EU-Full-audio_reorg-isRenamed", "A2_Characters", "simpsons_chars_global_str", "build", "PS3", "pal_en", "assets", "shared", "audio", "mix", "global", "mix_simpsons1_duck.mib");
+            string mibHeliumSample = Path.Combine(moduleRoot, "GameFiles", "PS3-EU-Full-audio_reorg-isRenamed", "A2_Characters", "simpsons_chars_global_str", "build", "PS3", "pal_en", "assets", "shared", "audio", "mix", "global", "mix_simpsons1_helium_on.mib");
+
+            if (File.Exists(mibDuckSample) && File.Exists(mibHeliumSample))
+            {
+                byte[] duckData = File.ReadAllBytes(mibDuckSample);
+                var duckMib = MibParser.Parse(duckData);
+                Assert(duckMib != null, "MibParser parsed mix_simpsons1_duck.mib");
+                Assert(duckMib!.BusCount == 55, "MibParser duck bus count is 55");
+                Assert(duckMib.Buses.Count == 55, "MibParser extracted all 55 mix buses");
+                Assert(duckMib.DspOverrideCount == 0, "MibParser duck has 0 DSP overrides");
+
+                byte[] heliumData = File.ReadAllBytes(mibHeliumSample);
+                var heliumMib = MibParser.Parse(heliumData);
+                Assert(heliumMib != null, "MibParser parsed mix_simpsons1_helium_on.mib");
+                Assert(heliumMib!.BusCount == 1, "MibParser helium bus count is 1");
+                Assert(heliumMib.DspOverrideCount == 2, "MibParser helium has 2 DSP overrides");
+                Assert(heliumMib.DspOverrides[0].Value == 1.5f, "MibParser helium pitch shift multiplier is 1.5x");
+
+                var parsedDuck = ResourceDispatcher.Parse(duckData, "mix_simpsons1_duck.mib");
+                Assert(parsedDuck.Format == ".mib", "ResourceDispatcher identified .mib");
+                Assert(parsedDuck.Table != null && parsedDuck.Table.Rows.Count == 55, "ResourceDispatcher produced MIB Table view (55 rows)");
+                Assert(parsedDuck.Tree != null && parsedDuck.Tree.Count > 0, "ResourceDispatcher produced MIB Tree view");
+            }
+        }
+        catch (Exception ex)
+        {
+            Assert(false, $"MibParser: {ex.Message}");
+        }
+
         Console.WriteLine($"\nTest Results: {passed} Passed, {failed} Failed.");
         return failed == 0 ? 0 : 1;
     }

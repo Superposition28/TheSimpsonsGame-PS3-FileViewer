@@ -139,9 +139,97 @@ public static class ResourceDispatcher
             }
             else if (kind == ".msb")
             {
-                var tree = MiscParsers.ParseMsb(data);
-                result.Tree = new List<TreeNodeModel> { tree };
-                result.Summary = tree.Label;
+                var msb = MsbParser.Parse(data);
+                if (msb != null)
+                {
+                    result.Structure = msb;
+                    result.Table = MsbParser.ToTable(msb);
+                    result.Tree = new List<TreeNodeModel> { MsbParser.ToTreeNode(msb) };
+                    result.Summary = $"MSB: {msb.Events.Count} events, Paired MUS: '{msb.PairedMusFilename}'";
+                }
+                else
+                {
+                    var tree = MiscParsers.ParseMsb(data);
+                    result.Tree = new List<TreeNodeModel> { tree };
+                    result.Summary = tree.Label;
+                }
+            }
+            else if (kind is ".rcb.ps3" or ".rcb")
+            {
+                var rcb = RcbParser.Parse(data);
+                if (rcb != null)
+                {
+                    result.Structure = rcb;
+                    result.Table = RcbParser.ToTable(rcb);
+                    result.Tree = new List<TreeNodeModel> { RcbParser.ToTreeNode(rcb) };
+                    result.Summary = $"RCB: {rcb.Entries.Count} component slices, Asset 0x{rcb.AssetHash:08X}";
+                }
+            }
+            else if (kind is ".bnk.ps3" or ".bnk")
+            {
+                var bnk = BnkParser.Parse(data);
+                if (bnk != null)
+                {
+                    result.Structure = bnk;
+                    result.Table = BnkParser.ToTable(bnk);
+                    result.Tree = new List<TreeNodeModel> { BnkParser.ToTreeNode(bnk) };
+                    result.Summary = $"BNK: {bnk.ClipCount} animation clips, Skeleton 0x{bnk.TargetSkeletonHash:08X}";
+                }
+            }
+            else if (kind == ".vfb")
+            {
+                var vfb = VfbParser.Parse(data);
+                if (vfb != null)
+                {
+                    result.Structure = vfb;
+                    result.Table = VfbParser.ToTable(vfb);
+                    result.Tree = new List<TreeNodeModel> { VfbParser.ToTreeNode(vfb) };
+                    result.Summary = $"VFB: \"{vfb.EffectName}\", {vfb.Entries.Count} emitters";
+                }
+            }
+            else if (kind == ".aub")
+            {
+                var aub = AubParser.Parse(data);
+                if (aub != null)
+                {
+                    result.Structure = aub;
+                    result.Table = AubParser.ToTable(aub);
+                    result.Tree = new List<TreeNodeModel> { AubParser.ToTreeNode(aub) };
+                    result.Summary = $"AUB: {aub.Buses.Count} audio mix buses, {aub.DspNodes.Count} DSP nodes";
+                }
+            }
+            else if (kind == ".rcm_b")
+            {
+                var rcm = RcmBParser.Parse(data);
+                if (rcm != null)
+                {
+                    result.Structure = rcm;
+                    result.Table = RcmBParser.ToTable(rcm);
+                    result.Tree = new List<TreeNodeModel> { RcmBParser.ToTreeNode(rcm) };
+                    result.Summary = $"RCM_B: {rcm.Records.Count} audio bindings, Magic 0x{rcm.Magic:04X}";
+                }
+            }
+            else if (kind == ".ctb")
+            {
+                var ctb = CtbParser.Parse(data);
+                if (ctb != null)
+                {
+                    result.Structure = ctb;
+                    result.Table = CtbParser.ToTable(ctb);
+                    result.Tree = new List<TreeNodeModel> { CtbParser.ToTreeNode(ctb) };
+                    result.Summary = $"CTB: {ctb.Cues.Count} event cues, Asset 0x{ctb.AssetHash:08X}";
+                }
+            }
+            else if (kind == ".mib")
+            {
+                var mib = MibParser.Parse(data);
+                if (mib != null)
+                {
+                    result.Structure = mib;
+                    result.Table = MibParser.ToTable(mib);
+                    result.Tree = new List<TreeNodeModel> { MibParser.ToTreeNode(mib) };
+                    result.Summary = $"MIB: {mib.Buses.Count} mix buses, {mib.DspOverrides.Count} DSP overrides";
+                }
             }
             else if (kind is ".txt" or ".lua" or ".json" or ".xml" or ".yaml" or ".yml" or ".toml")
             {
